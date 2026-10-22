@@ -3395,13 +3395,17 @@ npt_sizeof_ID3D11DeviceContext_OMSetRenderTargetsAndUnorderedAccessViews(const U
     (void)max_mode;  /* unused when the command has no struct/union inputs */
     size_t cmd_size = sizeof(struct npt_command_header);
     cmd_size += npt_sizeof_UINT(&NumRTVs, max_mode);
-    cmd_size += npt_sizeof_array_count(NumRTVs);
-    cmd_size += sizeof(uint64_t) * NumRTVs;
+    /* The encoder writes no handles for an absent array: the host reads
+     * commands back to back, so any other size breaks the stream. */
+    cmd_size += npt_sizeof_array_count(ppRenderTargetViews ? NumRTVs : 0);
+    if (ppRenderTargetViews)
+        cmd_size += sizeof(uint64_t) * NumRTVs;
     cmd_size += sizeof(uint64_t);
     cmd_size += npt_sizeof_UINT(&UAVStartSlot, max_mode);
     cmd_size += npt_sizeof_UINT(&NumUAVs, max_mode);
-    cmd_size += npt_sizeof_array_count(NumUAVs);
-    cmd_size += sizeof(uint64_t) * NumUAVs;
+    cmd_size += npt_sizeof_array_count(ppUnorderedAccessViews ? NumUAVs : 0);
+    if (ppUnorderedAccessViews)
+        cmd_size += sizeof(uint64_t) * NumUAVs;
     cmd_size += npt_sizeof_array_count(pUAVInitialCounts ? NumUAVs : 0);
     if (pUAVInitialCounts)
         cmd_size += npt_sizeof_UINT_array(pUAVInitialCounts, NumUAVs);

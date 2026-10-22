@@ -238,6 +238,14 @@ npt_id3d11devicecontext_default_OMSetRenderTargets(void *self, UINT NumViews, ID
 void NPT_STDMETHODCALLTYPE
 npt_id3d11devicecontext_default_OMSetRenderTargetsAndUnorderedAccessViews(void *self, UINT NumRTVs, ID3D11RenderTargetView ** ppRenderTargetViews, ID3D11DepthStencilView * pDepthStencilView, UINT UAVStartSlot, UINT NumUAVs, ID3D11UnorderedAccessView ** ppUnorderedAccessViews, const UINT * pUAVInitialCounts)
 {
+    /* A KEEP count is no array length: D3D11 ignores the arrays it goes
+     * with, and encoding them would walk 0xFFFFFFFF elements. */
+    if (NumRTVs == D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL)
+        ppRenderTargetViews = NULL;
+    if (NumUAVs == D3D11_KEEP_UNORDERED_ACCESS_VIEWS) {
+        ppUnorderedAccessViews = NULL;
+        pUAVInitialCounts = NULL;
+    }
     npt_async_ID3D11DeviceContext_OMSetRenderTargetsAndUnorderedAccessViews(npt_com_self_ring(self),npt_com_self_id(self),NumRTVs,ppRenderTargetViews,pDepthStencilView,UAVStartSlot,NumUAVs,ppUnorderedAccessViews,pUAVInitialCounts);
 }
 
