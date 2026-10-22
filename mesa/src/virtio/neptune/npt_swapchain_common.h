@@ -215,6 +215,11 @@ npt_gsc_backpressure_record(struct npt_guest_swapchain_common *c,
 void
 npt_gsc_reuse_gate(struct npt_guest_swapchain_common *c, uint32_t image);
 
+/* DXGI_PRESENT_TEST: whether a Present that takes this pool image now
+ * reports DXGI_STATUS_OCCLUDED. */
+bool
+npt_gsc_test_occluded(struct npt_guest_swapchain_common *c, uint32_t image);
+
 void
 npt_gsc_query_window_size(struct npt_guest_swapchain_common *c,
                           UINT *width, UINT *height);

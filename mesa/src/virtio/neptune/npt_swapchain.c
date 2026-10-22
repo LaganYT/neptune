@@ -214,7 +214,7 @@ gsc_present_common(void *self, UINT SyncInterval, UINT Flags)
       return NPT_DXGI_ERROR_DEVICE_REMOVED;
 
    if (Flags & NPT_DXGI_PRESENT_TEST)
-      return (c->wsi_failed || c->occluded_streak >= NPT_SC_OCCLUDED_STREAK)
+      return npt_gsc_test_occluded(c, s->next_image)
                 ? NPT_DXGI_STATUS_OCCLUDED : NPT_S_OK;
 
    /* Frame-time instrumentation (NPT_DEBUG=present_timing).  t0=entry,

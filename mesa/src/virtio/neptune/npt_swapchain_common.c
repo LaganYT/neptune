@@ -490,6 +490,24 @@ npt_gsc_reuse_gate(struct npt_guest_swapchain_common *c, uint32_t image)
    }
 }
 
+/* Only the reuse gate clears the streak, and a test never runs it, while
+ * an app told OCCLUDED may only test until a test says otherwise: Rocket
+ * League does, and never presented again after its window left the
+ * screen for a moment.  A test looks at the image again: released, the
+ * compositor consumes frames once more. */
+bool
+npt_gsc_test_occluded(struct npt_guest_swapchain_common *c, uint32_t image)
+{
+   mtx_lock(&c->present_mutex);
+   if (c->occluded_streak >= NPT_SC_OCCLUDED_STREAK &&
+       atomic_load(&c->image_inflight[image]) == 0)
+      c->occluded_streak = 0;
+   const bool occluded =
+      c->wsi_failed || c->occluded_streak >= NPT_SC_OCCLUDED_STREAK;
+   mtx_unlock(&c->present_mutex);
+   return occluded;
+}
+
 void
 npt_gsc_query_window_size(struct npt_guest_swapchain_common *c,
                           UINT *width, UINT *height)
