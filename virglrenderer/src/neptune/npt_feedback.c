@@ -318,12 +318,6 @@ npt_feedback_query_poll_one(struct npt_context *ctx,
    if (entry->cookie > NPT_QUERY_FEEDBACK_SLOT_RESULT)
       return false;
 
-   struct npt_resource *res = npt_context_get_resource(ctx, entry->fb_res_id);
-   struct npt_query_feedback_slot *slot =
-      npt_feedback_slot_ptr(res, entry->fb_offset, sizeof(*slot));
-   if (!slot)
-      return false;
-
    /* PIPELINE_STATISTICS is 88 bytes; the slot caps result room. */
    uint8_t scratch[NPT_QUERY_FEEDBACK_SLOT_RESULT];
    /* D3D11_ASYNC_GETDATA_DONOTFLUSH: D3D11 forbids implicit Flush
@@ -339,13 +333,25 @@ npt_feedback_query_poll_one(struct npt_context *ctx,
    if (hr != 0 /* S_OK */)
       return false;
 
-   memcpy(slot->result, scratch, entry->cookie);
-   /* Release pairs with the guest's acquire-load on state.  Packing
-    * (version, flag) into one 64-bit atomic gives an atomic snapshot. */
-   const uint64_t state =
-      ((uint64_t)entry->version << 32) | NPT_QUERY_FEEDBACK_FLAG_READY;
-   atomic_store_explicit(&slot->state, state, memory_order_release);
-   return true;
+   /* The slot is guest shmem the guest may destroy over the virtqueue
+    * meanwhile: the pin keeps it mapped until it is written.  Taken only
+    * once the result is in, as most polls find the query not ready. */
+   struct npt_resource *res =
+      npt_context_pin_shm_resource(ctx, entry->fb_res_id);
+   struct npt_query_feedback_slot *slot =
+      npt_feedback_slot_ptr(res, entry->fb_offset, sizeof(*slot));
+   if (slot) {
+      memcpy(slot->result, scratch, entry->cookie);
+      /* Release pairs with the guest's acquire-load on state.  Packing
+       * (version, flag) into one 64-bit atomic gives an atomic
+       * snapshot. */
+      const uint64_t state =
+         ((uint64_t)entry->version << 32) | NPT_QUERY_FEEDBACK_FLAG_READY;
+      atomic_store_explicit(&slot->state, state, memory_order_release);
+   }
+   if (res)
+      npt_context_unpin_resource(ctx, res);
+   return slot != NULL;
 }
 
 void
@@ -546,18 +552,6 @@ npt_feedback_fence_poll_one(struct npt_context *ctx,
    if (!entry->host_obj || !entry->fb_res_id)
       return false;
 
-   struct npt_resource *res = npt_context_get_resource(ctx, entry->fb_res_id);
-   struct npt_d3d11_fence_feedback_slot *slot =
-      npt_feedback_slot_ptr(res, entry->fb_offset, sizeof(*slot));
-   if (!slot)
-      return false;
-
-   /* The substrate poll holds st->mutex across this call so no two
-    * threads write the same slot concurrently; the release store
-    * publishes the value to the guest's local read.  Plain snapshot
-    * store, NOT a monotonic max: D3D12 fences may be legally rewound
-    * (Signal(lower)), and for monotonic D3D11 fences the snapshot is
-    * a valid lower bound anyway. */
    UINT64 val;
    if (entry->type == NPT_FEEDBACK_TYPE_FENCE12) {
       PFN_ID3D12Fence_GetCompletedValue get12 =
@@ -572,8 +566,25 @@ npt_feedback_fence_poll_one(struct npt_context *ctx,
                            NPT_VTBL_ID3D11Fence_GetCompletedValue);
       val = get11(entry->host_obj);
    }
-   atomic_store_explicit(&slot->completed_value, (uint64_t)val,
-                         memory_order_release);
+
+   /* The substrate poll holds st->mutex across this call so no two
+    * threads write the same slot concurrently; the release store
+    * publishes the value to the guest's local read.  Plain snapshot
+    * store, NOT a monotonic max: D3D12 fences may be legally rewound
+    * (Signal(lower)), and for monotonic D3D11 fences the snapshot is
+    * a valid lower bound anyway.  The pin keeps the slot mapped against
+    * a guest destroy of its shmem over the virtqueue. */
+   struct npt_resource *res =
+      npt_context_pin_shm_resource(ctx, entry->fb_res_id);
+   struct npt_d3d11_fence_feedback_slot *slot =
+      npt_feedback_slot_ptr(res, entry->fb_offset, sizeof(*slot));
+   if (slot)
+      atomic_store_explicit(&slot->completed_value, (uint64_t)val,
+                            memory_order_release);
+   if (res)
+      npt_context_unpin_resource(ctx, res);
+   if (!slot)
+      return false;
 
    /* D3D12 permits Signal to a lower value, and target_value only ever
     * rises, so a rewound fence could never clear it again: latch the

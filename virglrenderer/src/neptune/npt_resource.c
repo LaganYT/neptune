@@ -288,7 +288,8 @@ HRESULT
 npt_resource_map(struct npt_context *ctx,
                  uint64_t context_id, uint64_t resource_id,
                  uint32_t subresource, uint32_t access_flags,
-                 uint32_t api_map_flags, uint32_t shmem_res_id,
+                 uint32_t api_map_flags,
+                 struct npt_resource *shmem_res, uint32_t shmem_res_id,
                  uint64_t read_range_begin,
                  uint64_t read_range_end,
                  uint64_t byte_size,
@@ -311,10 +312,7 @@ npt_resource_map(struct npt_context *ctx,
                                     "map_resource"))
       return NPT_E_INVALIDARG;
 
-   struct npt_resource *shmem_res =
-      npt_context_get_resource(ctx, shmem_res_id);
-   if (!shmem_res || shmem_res->fd_type != VIRGL_RESOURCE_FD_SHM ||
-       !shmem_res->u.data) {
+   if (!shmem_res) {
       npt_log("map_resource: invalid SHM resource %u", shmem_res_id);
       return NPT_E_FAIL;
    }
@@ -445,7 +443,8 @@ npt_resource_map(struct npt_context *ctx,
 HRESULT
 npt_resource_unmap(struct npt_context *ctx,
                    uint64_t context_id, uint64_t resource_id,
-                   uint32_t subresource, uint32_t shmem_res_id,
+                   uint32_t subresource,
+                   struct npt_resource *shmem_res, uint32_t shmem_res_id,
                    uint32_t shmem_offset, uint64_t byte_size,
                    uint32_t access_flags,
                    uint64_t written_range_begin,
@@ -461,10 +460,7 @@ npt_resource_unmap(struct npt_context *ctx,
                                     "unmap_resource"))
       return NPT_E_INVALIDARG;
 
-   struct npt_resource *shmem_res =
-      npt_context_get_resource(ctx, shmem_res_id);
-   if (!shmem_res || shmem_res->fd_type != VIRGL_RESOURCE_FD_SHM ||
-       !shmem_res->u.data) {
+   if (!shmem_res) {
       npt_log("unmap_resource: invalid SHM resource %u", shmem_res_id);
       return NPT_E_FAIL;
    }
